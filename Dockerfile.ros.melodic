@@ -1,0 +1,95 @@
+#
+# 빌드방법
+# docker build --network=host -t amr-packet-sensor-soslab:0.1 -f ./Dockerfile.desktop .
+# 
+# 참고 
+# https://github.com/dusty-nv/jetson-containers
+
+
+# 가져올 이미지
+ARG BASE_IMAGE=nvcr.io/nvidia/l4t-base:r32.5.0
+FROM ${BASE_IMAGE}
+
+ARG ROS_PKG=ros_base
+ARG ROS_DISTRO=melodic
+ENV ROS_ROOT=/opt/ros/${ROS_DISTRO}
+ENV DEBIAN_FRONTEND=noninteractive
+
+WORKDIR /root
+
+# add the ROS deb repo to the apt sources list
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        git \
+        cmake \
+        build-essential \
+        curl \
+        wget \
+        gnupg2 \
+        lsb-release \
+        ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'
+RUN curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | apt-key add -
+
+# install ROS packages
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+		ros-${ROS_DISTRO}-`echo "${ROS_PKG}" | tr '_' '-'` \
+		ros-${ROS_DISTRO}-image-transport \
+		ros-${ROS_DISTRO}-vision-msgs \
+          python-rosdep \
+          python-rosinstall \
+          python-rosinstall-generator \
+          python-wstool \
+    && rm -rf /var/lib/apt/lists/*
+
+# init/update rosdep
+RUN apt-get update && \
+    cd ${ROS_ROOT} && \
+    rosdep init && \
+    rosdep update && \
+    rm -rf /var/lib/apt/lists/*
+    
+# 기본 로스 작업 폴더 만들기
+ARG ROS_SPACE=ros_ws
+RUN mkdir -p /root/${ROS_SPACE}/src
+
+# install 의존 패키지
+WORKDIR /root/${ROS_SPACE}
+RUN apt-get install -y \
+        libsdl-dev \
+        libsdl-image1.2-dev \
+        ros-${ROS_DISTRO}-map-server \
+        ros-${ROS_DISTRO}-csm \
+        ros-${ROS_DISTRO}-jsk-recognition-msgs \
+        ros-${ROS_DISTRO}-jsk-rviz-plugins
+
+# 소스
+RUN source /opt/ros/${ROS_DISTRO}/setup.bash
+
+# 빌드
+RUN catkin_make -DCMAKE_BUILD_TYPE=Release
+
+# entrypoint 필요없으면 제거
+# setup entrypoint
+#COPY ./packages/ros_entrypoint.sh /ros_entrypoint.sh
+#ENTRYPOINT ["/ros_entrypoint.sh"]
+
+#packages/ros_entrypoint.sh
+#!/bin/bash
+#set -e
+#ros_env_setup="/opt/ros/$ROS_DISTRO/setup.bash"
+#echo "sourcing   $ros_env_setup"
+#source "$ros_env_setup"
+#echo "ROS_ROOT   $ROS_ROOT"
+#echo "ROS_DISTRO $ROS_DISTRO"
+#exec "$@"
+
+
+# 소스 등록
+RUN echo 'source /opt/ros/${ROS_DISTRO}/setup.bash' >> /root/.bashrc
+RUN echo 'source /root/${ROS_SPACE}/devel/setup.bash' >> /root/.bashrc
+CMD ["bash"]
+WORKDIR /root/${ROS_SPACE}

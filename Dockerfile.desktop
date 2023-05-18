@@ -1,0 +1,48 @@
+#docker build --network=host -t amr-packet-sensor-soslab:0.1 -f ./Dockerfile.desktop .
+
+# 가져올 이미지
+ARG ROS_DISTRO=melodic
+ARG BASE_IMAGE=osrf/ros:${ROS_DISTRO}-desktop-full
+FROM ${BASE_IMAGE}
+
+# 폴더 만들기
+# 기본 다운로드 폴더
+ARG DOWN_SPACE=exis_ws
+# 기본 로스 작업 폴더
+ARG ROS_SPACE=ros_ws
+
+RUN mkdir -p /root/${DOWN_SPACE}
+RUN mkdir -p /root/${ROS_SPACE}/src
+
+# 다운로드 폴더에서 소스 받고 로스 폴더로 옮기기
+#WORKDIR /root/${DOWN_SPACE}
+#RUN git clone https://github.com/pollux-ai/amr-packet-sensor-soslab.git
+#COPY amr-packet-sensor-soslab/* /root/${ROS_SPACE}/src
+
+# 로스 폴더에서 의존 패키지 설치 후 빌드
+WORKDIR /root/${ROS_SPACE}
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+          git \
+		cmake \
+		build-essential \
+		curl \
+		wget
+RUN apt install -y \
+        libsdl-dev \
+        libsdl-image1.2-dev \
+        ros-${ROS_DISTRO}-map-server \
+        ros-${ROS_DISTRO}-csm \
+        ros-${ROS_DISTRO}-jsk-recognition-msgs \
+        ros-${ROS_DISTRO}-jsk-rviz-plugins
+
+RUN source /opt/ros/${ROS_DISTRO}/setup.bash
+
+# 빌드
+RUN catkin_make -DCMAKE_BUILD_TYPE=Release
+
+# 소스
+RUN echo 'source /opt/ros/${ROS_DISTRO}/setup.bash' >> /root/.bashrc
+RUN echo 'source /root/${ROS_SPACE}/devel/setup.bash' >> /root/.bashrc
+CMD ["bash"]
+WORKDIR /root/${ROS_SPACE}
